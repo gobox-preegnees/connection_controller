@@ -15,7 +15,8 @@ import (
 )
 
 type ISnapshotService interface {
-	SendSnapshot(ctx context.Context, snapshot entity.Snapshot) error
+	SaveSnapshot(ctx context.Context, snapshot entity.Snapshot) error
+	SaveOwner(ctx context.Context, snapshot entity.Snapshot) error
 }
 
 type IConsistencyService interface {
@@ -82,14 +83,26 @@ func (h http1) router() http.Handler {
 			}
 
 			ctx := context.Background()
-			if err := h.snapshotService.SendSnapshot(ctx, shapshot); err != nil {
+			if err := h.snapshotService.SaveSnapshot(ctx, shapshot); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
                 return
 			}
 		})
 		
 		r.Post("/event", func(w http.ResponseWriter, r *http.Request) {
-			// TODO: validate
+			owner := entity.Owner{}
+			err := json.NewDecoder(r.Body).Decode(&owner)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+
+			v := validator.New()
+			if err := v.Struct(owner); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			
 			go func() {
 				<-r.Context().Done()
 				h.log.Info("Client is disconnected")
