@@ -1,25 +1,35 @@
-package http1
+package http
 
 import (
-	"net/http"
 	"context"
 	"encoding/json"
+	"fmt"
+	"net/http"
 
 	entity "github.com/gobox-preegnees/connection_controller/internal/domain/entity"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/jwtauth/v5"
-	"github.com/sirupsen/logrus"
-	"github.com/r3labs/sse/v2"
 	"github.com/go-playground/validator/v10"
+	"github.com/r3labs/sse/v2"
+	"github.com/sirupsen/logrus"
 )
+
+type IStatisticService interface {
+	GetAverageTimeout() (float64, error)
+}
 
 type ISnapshotService interface {
 	SaveSnapshot(ctx context.Context, snapshot entity.Snapshot) error
-	SaveOwner(ctx context.Context, snapshot entity.Snapshot) error
 }
 
 type IConsistencyService interface {
+	Read() entity.Consistency
+}
+
+type IOwnerService interface {
+	SaveOwner(ctx context.Context, owner entity.Owner) error
+	DeleteOwner(ctx context.Context, owner entity.Owner)
 }
 
 type http1 struct {
@@ -27,26 +37,29 @@ type http1 struct {
 	addr               string
 	snapshotService    ISnapshotService
 	consistencyService IConsistencyService
+	ownerService       IOwnerService
 	alg                string
 	secret             string
 }
 
-type CnfHttp1Server struct {
+type CnfhttpServer struct {
 	Log                *logrus.Logger
 	Addr               string
 	SnapshotService    ISnapshotService
 	ConsistencyService IConsistencyService
+	OwnerService       IOwnerService
 	JWTAlg             string
 	JWTSecret          string
 }
 
-func NewHttp1Server(cnf CnfHttp1Server) *http1 {
+func NewhttpServer(cnf CnfhttpServer) *http1 {
 
 	return &http1{
 		log:                cnf.Log,
 		addr:               cnf.Addr,
 		snapshotService:    cnf.SnapshotService,
 		consistencyService: cnf.ConsistencyService,
+		ownerService:       cnf.OwnerService,
 		alg:                cnf.JWTAlg,
 		secret:             cnf.JWTSecret,
 	}
@@ -64,10 +77,28 @@ func (h http1) router() http.Handler {
 	r := chi.NewRouter()
 	sseServer := sse.New()
 
+	go func() {
+		for {
+			// TODO: добавить статистику по id или таймстемпам
+			consistency := h.consistencyService.Read()
+			streamId := fmt.Sprintf("%s_%s", consistency.Username, consistency.Folder)
+			data, err := json.Marshal(consistency)
+			if err != nil {
+				h.log.Fatal(err)
+			}
+			h.log.Debugf("consistency:%s, streamId:%s, data:%s", consistency, streamId, data)
+
+			sseServer.Publish(streamId, &sse.Event{
+				Data: data,
+			})
+		}
+	}()
+
 	r.Group(func(r chi.Router) {
 		r.Use(jwtauth.Verifier(jwtauth.New(h.alg, []byte(h.secret), nil)))
 		r.Use(jwtauth.Authenticator)
-		
+
+		// TODO: добавить ручку для получения статистики по времени ответа
 		r.Post("/snapshot", func(w http.ResponseWriter, r *http.Request) {
 			shapshot := entity.Snapshot{}
 			err := json.NewDecoder(r.Body).Decode(&shapshot)
@@ -85,10 +116,10 @@ func (h http1) router() http.Handler {
 			ctx := context.Background()
 			if err := h.snapshotService.SaveSnapshot(ctx, shapshot); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
-                return
+				return
 			}
 		})
-		
+
 		r.Post("/event", func(w http.ResponseWriter, r *http.Request) {
 			owner := entity.Owner{}
 			err := json.NewDecoder(r.Body).Decode(&owner)
@@ -102,10 +133,21 @@ func (h http1) router() http.Handler {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
-			
+
+			ctx := context.Background()
+			if err := h.ownerService.SaveOwner(ctx, owner); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+
 			go func() {
+				_owner := owner
+				streamId := fmt.Sprintf("%s_%s", _owner.Username, _owner.Folder)
+				sseServer.CreateStream(streamId)
 				<-r.Context().Done()
 				h.log.Info("Client is disconnected")
+				sseServer.RemoveStream(streamId)
+				h.ownerService.DeleteOwner(ctx, _owner)
 				return
 			}()
 			sseServer.ServeHTTP(w, r)
