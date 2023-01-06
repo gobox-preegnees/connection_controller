@@ -4,6 +4,7 @@ import (
 	"context"
 
 	http "github.com/gobox-preegnees/connection_controller/internal/controller/http"
+	mb "github.com/gobox-preegnees/connection_controller/internal/controller/message_broker/kafka"
 	entity "github.com/gobox-preegnees/connection_controller/internal/domain/entity"
 	errors "github.com/gobox-preegnees/connection_controller/internal/errors"
 
@@ -53,6 +54,11 @@ func (u usecase) GetConsistency(ctx context.Context) (entity.Consistency, error)
 	return u.consistencyService.GetConsistency(ctx)
 }
 
+func (u usecase) SaveConsistency(ctx context.Context, consistency entity.Consistency) error {
+	
+	return u.consistencyService.SaveConsistency(ctx, consistency)
+}
+
 func (u usecase) SaveSnapshot(ctx context.Context, snapshot entity.Snapshot) error {
 
 	return u.snapshotService.SaveSnapshot(ctx, snapshot)
@@ -82,3 +88,4 @@ func (u usecase) DeleteOwner(ctx context.Context, owner entity.Owner) error {
 }
 
 var _ http.IUsecase = (*usecase)(nil)
+var _ mb.IUsecase = (*usecase)(nil)

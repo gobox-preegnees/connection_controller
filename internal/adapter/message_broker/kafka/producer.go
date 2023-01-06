@@ -6,6 +6,7 @@ import (
 	"time"
 
 	mbDTO "github.com/gobox-preegnees/connection_controller/internal/adapter/message_broker"
+	service "github.com/gobox-preegnees/connection_controller/internal/domain/service"
 
 	"github.com/segmentio/kafka-go"
 	"github.com/segmentio/kafka-go/protocol"
@@ -46,7 +47,7 @@ func NewProducer(cnf ProducerConf) *producer {
 	}
 }
 
-func (p producer) PublishSnapshot(req mbDTO.PublishSnapshotReqDTO) error {
+func (p producer) CreateOneSnapshot(req mbDTO.PublishSnapshotReqDTO) error {
 
 	for i := 0; i < p.attempts; i++ {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(p.timeount)*time.Second)
@@ -81,3 +82,5 @@ func (p producer) Close() error {
 
 	return p.writer.Close()
 }
+
+var _ service.ISnapshotMessageBroker = (*producer)(nil)

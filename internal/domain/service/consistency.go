@@ -18,7 +18,7 @@ type CnfConsistensyService struct {
 	Log *logrus.Logger
 }
 
-func New(cnf CnfConsistensyService) *consistensyService {
+func NewConsistensyService(cnf CnfConsistensyService) *consistensyService {
 
 	return &consistensyService{
 		log:           cnf.Log,
@@ -26,12 +26,16 @@ func New(cnf CnfConsistensyService) *consistensyService {
 	}
 }
 
-func (c consistensyService) GetConsistency(ctx context.Context) (entity.Consistency, error) {
+func (c *consistensyService) GetConsistency(ctx context.Context) (entity.Consistency, error) {
 
-	return <-c.consistensyCh, nil
+	consistensy, ok := <-c.consistensyCh
+	if !ok {
+		return entity.Consistency{}, context.Canceled
+	} 
+	return consistensy, nil
 }
 
-func (c consistensyService) SaveConsistency(ctx context.Context, consistency entity.Consistency) error {
+func (c *consistensyService) SaveConsistency(ctx context.Context, consistency entity.Consistency) error {
 
 	c.consistensyCh <- consistency
 	return nil
