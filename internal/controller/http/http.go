@@ -191,6 +191,7 @@ func (h http1) router() http.Handler {
 				}
 				return
 			}()
+			// TODO: нужно сделать создание стрима через одну ручку, а захождение на другую
 			sseServer.ServeHTTP(w, r)
 		})
 	})
