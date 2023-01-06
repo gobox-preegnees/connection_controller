@@ -1,0 +1,15 @@
+version: '3.8'
+services:
+  redis:
+    image: bitnami/redis:6.2.8
+    restart: always
+    ports:
+      - '6379:6379'
+    command: /bin/sh -c "redis-server --requirepass password"
+    # env_file:
+    #   - redis.env
+    # volumes: 
+    #   - cache:/data
+# volumes:
+#   cache:
+#     driver: local

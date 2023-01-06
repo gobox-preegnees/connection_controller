@@ -15,53 +15,37 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-type IStatisticService interface {
-	GetAverageTimeout() (float64, error)
-}
-
-type ISnapshotService interface {
+type IUsecase interface {
 	SaveSnapshot(ctx context.Context, snapshot entity.Snapshot) error
-}
-
-type IConsistencyService interface {
-	Read() entity.Consistency
-}
-
-type IOwnerService interface {
+	GetConsistency() entity.Consistency
 	SaveOwner(ctx context.Context, owner entity.Owner) error
-	DeleteOwner(ctx context.Context, owner entity.Owner)
+	DeleteOwner(ctx context.Context, owner entity.Owner) error
 }
 
 type http1 struct {
-	log                *logrus.Logger
-	addr               string
-	snapshotService    ISnapshotService
-	consistencyService IConsistencyService
-	ownerService       IOwnerService
-	alg                string
-	secret             string
+	log     *logrus.Logger
+	addr    string
+	usecase IUsecase
+	alg     string
+	secret  string
 }
 
 type CnfhttpServer struct {
-	Log                *logrus.Logger
-	Addr               string
-	SnapshotService    ISnapshotService
-	ConsistencyService IConsistencyService
-	OwnerService       IOwnerService
-	JWTAlg             string
-	JWTSecret          string
+	Log       *logrus.Logger
+	Addr      string
+	Usecase   IUsecase
+	JWTAlg    string
+	JWTSecret string
 }
 
 func NewhttpServer(cnf CnfhttpServer) *http1 {
 
 	return &http1{
-		log:                cnf.Log,
-		addr:               cnf.Addr,
-		snapshotService:    cnf.SnapshotService,
-		consistencyService: cnf.ConsistencyService,
-		ownerService:       cnf.OwnerService,
-		alg:                cnf.JWTAlg,
-		secret:             cnf.JWTSecret,
+		log:     cnf.Log,
+		addr:    cnf.Addr,
+		usecase: cnf.Usecase,
+		alg:     cnf.JWTAlg,
+		secret:  cnf.JWTSecret,
 	}
 }
 
@@ -80,13 +64,13 @@ func (h http1) router() http.Handler {
 	go func() {
 		for {
 			// TODO: добавить статистику по id или таймстемпам
-			consistency := h.consistencyService.Read()
+			consistency := h.usecase.GetConsistency()
 			streamId := fmt.Sprintf("%s_%s", consistency.Username, consistency.Folder)
 			data, err := json.Marshal(consistency)
 			if err != nil {
 				h.log.Fatal(err)
 			}
-			h.log.Debugf("consistency:%s, streamId:%s, data:%s", consistency, streamId, data)
+			h.log.Debugf("consistency:%s, streamId:%s, data:%s, timestamp: %d", consistency, streamId, data, consistency.Timestamp)
 
 			sseServer.Publish(streamId, &sse.Event{
 				Data: data,
@@ -114,7 +98,7 @@ func (h http1) router() http.Handler {
 			}
 
 			ctx := context.Background()
-			if err := h.snapshotService.SaveSnapshot(ctx, shapshot); err != nil {
+			if err := h.usecase.SaveSnapshot(ctx, shapshot); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
@@ -135,19 +119,18 @@ func (h http1) router() http.Handler {
 			}
 
 			ctx := context.Background()
-			if err := h.ownerService.SaveOwner(ctx, owner); err != nil {
+			if err := h.usecase.SaveOwner(ctx, owner); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
 
 			go func() {
-				_owner := owner
-				streamId := fmt.Sprintf("%s_%s", _owner.Username, _owner.Folder)
+				streamId := fmt.Sprintf("%s_%s", owner.Username, owner.Folder)
 				sseServer.CreateStream(streamId)
 				<-r.Context().Done()
 				h.log.Info("Client is disconnected")
 				sseServer.RemoveStream(streamId)
-				h.ownerService.DeleteOwner(ctx, _owner)
+				h.usecase.DeleteOwner(ctx, owner)
 				return
 			}()
 			sseServer.ServeHTTP(w, r)
