@@ -62,7 +62,7 @@ func main() {
 		Log:  logger,
 		Addr: "localhost:6060",
 		Usecase: uc,
-		JWTAlg: "sha256",
+		JWTAlg: "sha256", // TODO: -> "HS256"
 		JWTSecret: "secret",
 		CrtPath: "server.crt",
 		KeyPath: "server.key",
