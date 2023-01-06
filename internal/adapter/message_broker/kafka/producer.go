@@ -23,7 +23,7 @@ type producer struct {
 
 type ProducerConf struct {
 	Log       *logrus.Logger
-	ErrTopic  string
+	Topic     string
 	Addrs     []string
 	Attempts  int
 	Timeout   int
@@ -32,9 +32,16 @@ type ProducerConf struct {
 
 func NewProducer(cnf ProducerConf) *producer {
 
+	if conn, err := kafka.Dial("tcp", cnf.Addrs[0]); err != nil {
+		conn.Close()
+		cnf.Log.Fatal(err)
+	} else {
+		conn.Close()
+	}
+
 	w := &kafka.Writer{
 		Addr:                   kafka.TCP(cnf.Addrs...),
-		Topic:                  cnf.ErrTopic,
+		Topic:                  cnf.Topic,
 		AllowAutoTopicCreation: true,
 		Logger:                 cnf.Log,
 	}

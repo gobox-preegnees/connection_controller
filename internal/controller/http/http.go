@@ -2,7 +2,7 @@ package http
 
 import (
 	"context"
-	"crypto/tls"
+	// "crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -68,21 +68,21 @@ func NewhttpServer(cnf CnfhttpServer) *http1 {
 
 func (h *http1) Run() {
 
-	cer, err := tls.LoadX509KeyPair(h.crtPath, h.kayPath)
-	if err != nil {
-		h.log.Fatal(err)
-	}
+	// cer, err := tls.LoadX509KeyPair(h.crtPath, h.kayPath)
+	// if err != nil {
+	// 	h.log.Fatal(err)
+	// }
 
 	h.server = &http.Server{
 		Addr:    h.addr,
 		Handler: h.router(),
-		TLSConfig: &tls.Config{
-			Certificates: []tls.Certificate{cer},
-		},
+		// TLSConfig: &tls.Config{
+		// 	Certificates: []tls.Certificate{cer},
+		// },
 	}
 	h.log.Info("server starting...")
 
-	h.log.Fatal(h.server.ListenAndServe())
+	h.log.Fatal(h.server.ListenAndServeTLS(h.crtPath, h.kayPath))
 }
 
 func (h *http1) Shutdown() error {
@@ -116,6 +116,10 @@ func (h http1) router() http.Handler {
 			h.log.Debugf("consistency sent to streamId: %s, requestId: %s", streamId, requestId)
 		}
 	}()
+
+	r.Get("/hello", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("hello"))
+	})
 
 	r.Group(func(r chi.Router) {
 		r.Use(jwtauth.Verifier(jwtauth.New(h.alg, []byte(h.secret), nil)))

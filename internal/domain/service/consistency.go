@@ -28,6 +28,7 @@ func NewConsistensyService(cnf CnfConsistensyService) *consistensyService {
 
 func (c *consistensyService) GetConsistency(ctx context.Context) (entity.Consistency, error) {
 
+	// TODO: нужно где то тут монеторить закрытие контекста и если что закрывать какнал через sync one
 	consistensy, ok := <-c.consistensyCh
 	if !ok {
 		return entity.Consistency{}, context.Canceled

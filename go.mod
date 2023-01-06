@@ -11,6 +11,7 @@ require (
 	github.com/r3labs/sse/v2 v2.9.0
 	github.com/segmentio/kafka-go v0.4.38
 	github.com/sirupsen/logrus v1.9.0
+	golang.org/x/sync v0.1.0
 )
 
 require (

@@ -4,12 +4,12 @@ import (
 	"context"
 	"testing"
 
-	"github.com/go-redis/redis/v8"
+	// "github.com/go-redis/redis/v8"
 	storage "github.com/gobox-preegnees/connection_controller/internal/adapter/dao"
 	"github.com/sirupsen/logrus"
 )
 
-var client *redis.Client
+// var client *redis.Client
 
 const url = "redis://default:password@localhost:6379/0"
 
@@ -17,17 +17,17 @@ var ctx context.Context = context.Background()
 
 func TestMain(t *testing.M) {
 
-	opt, err := redis.ParseURL(url)
-	if err != nil {
-		panic(err)
-	}
+	// opt, err := redis.ParseURL(url)
+	// if err != nil {
+	// 	panic(err)
+	// }
 
-	client := redis.NewClient(opt)
-	status := client.Ping(ctx)
-	if status.Err() != nil {
-		panic(status.Err())
-	}
-	defer client.Close()
+	// client := redis.NewClient(opt)
+	// status := client.Ping(ctx)
+	// if status.Err() != nil {
+	// 	panic(status.Err())
+	// }
+	// defer client.Close()
 
 	t.Run()
 }
@@ -38,6 +38,7 @@ func clear(r *redisClient) {
 
 func TestCreateAndDelete(t *testing.T) {
 
+	// Нужно запускать отдельно контейнер с редисом и со свсем остальным
 	logger := logrus.New()
 	r := NewRedisClient(CnfRedisClient{
 		Ctx: ctx,
