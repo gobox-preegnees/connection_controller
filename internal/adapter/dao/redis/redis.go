@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	daoDTO "github.com/gobox-preegnees/connection_controller/internal/adapter/dao"
-	// service "github.com/gobox-preegnees/connection_controller/internal/domain/service"
+	service "github.com/gobox-preegnees/connection_controller/internal/domain/service"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/sirupsen/logrus"
@@ -88,15 +88,12 @@ func (r redisClient) CreateOneOwner(req daoDTO.CreateOneOwnerReqDTO) (int, error
 	if err != nil {
 		return -1, err
 	}
-	fmt.Printf("incr by stream=%s: current_connections=%d\n", stream, num)
-	if num == -1 {
-		return -1, nil
-	}
+	r.log.Debugf("incr by stream=%s: current_connections=%d\n", stream, num)
 	return num, nil
 }
 
 func (r redisClient) DeleteOneOwner(req daoDTO.DeleteOneOwnerReqDTO) (int, error) {
-	
+
 	stream := fmt.Sprintf("%s_%s", req.Usernamme, req.Folder)
 	num, err := decrBy.Run(
 		req.Ctx,
@@ -113,4 +110,4 @@ func (r redisClient) DeleteOneOwner(req daoDTO.DeleteOneOwnerReqDTO) (int, error
 	return num, nil
 }
 
-// var _ service.IOwnerDao = (*redisClient)(nil)
+var _ service.IOwnerDao = (*redisClient)(nil)
