@@ -10,12 +10,12 @@ type File struct {
 // Snapshot. This structure must be received by the server from the client.
 // This structure is received by the server when the client has a change.
 type Snapshot struct {
-	// Installed on the client
-	ExternalId int `json:"external_id"`
 	// Installed on the server
-	InternalId int `json:"internal_id"`
+	RequestId string `json:"request_id" validate:"required"`
+	// user = username + folder + client
+	StreamId string `json:"stream_id" validate:"required"`
 	// Installed on the server
-	Timestamp int `json:"timestamp" validate:"required"`
+	Timestamp int64 `json:"timestamp" validate:"required"`
 
 	// Installed on the client. Has the values 100 - at start, 300 - at update, 400 - at error
 	Action string `json:"on_action" validate:"required,eq=100|eq=300|eq=400"`

@@ -3,45 +3,49 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"time"
 
-	daoDTO "github.com/gobox-preegnees/connection_controller/internal/adapter/dao"
+	mbDTO "github.com/gobox-preegnees/connection_controller/internal/adapter/message_broker"
 	entity "github.com/gobox-preegnees/connection_controller/internal/domain/entity"
 	usecase "github.com/gobox-preegnees/connection_controller/internal/domain/usecase"
 
 	"github.com/sirupsen/logrus"
 )
 
-type ISnapshotDao interface {
-	CreateOneSnapshot(daoDTO.CreateOneSnapshotReqDTO) error
+type ISnapshotMessageBroker interface {
+	CreateOneSnapshot(mbDTO.PublishSnapshotReqDTO) error
 }
 
 type snapshotService struct {
 	log *logrus.Logger
-	dao ISnapshotDao
+	mb ISnapshotMessageBroker
 }
 
 type CnfSnapshotService struct {
 	Log *logrus.Logger
-	SnapshotDao ISnapshotDao
+	SnapshotMessageBroker ISnapshotMessageBroker
 }
 
 func NewShanpshotService(cnf CnfSnapshotService) *snapshotService {
 
 	return &snapshotService{
 		log: cnf.Log,
-		dao: cnf.SnapshotDao,
+		mb: cnf.SnapshotMessageBroker,
 	}
 }
 
-// TODO: тут придумать что нибудь по лучше, чем перекидывание байт
 func (s snapshotService) SaveSnapshot(ctx context.Context, snapshot entity.Snapshot) error {
 
 	data, err := json.Marshal(snapshot)
 	if err!= nil {
         return err
     }
-	return s.dao.CreateOneSnapshot(daoDTO.CreateOneSnapshotReqDTO{
-		Snapshot: data,
+	
+	return s.mb.CreateOneSnapshot(mbDTO.PublishSnapshotReqDTO{
+		RequestId: snapshot.RequestId,
+		StreamId: snapshot.StreamId,
+		Timestamp: time.Unix(snapshot.Timestamp, 0).UTC(),
+		Data: data,
 	})
 }
 

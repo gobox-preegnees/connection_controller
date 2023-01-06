@@ -2,10 +2,6 @@ package storage
 
 import "context"
 
-type CreateOneSnapshotReqDTO struct {
-	Snapshot []byte
-}
-
 type DeleteOneOwnerReqDTO struct {
 	Ctx       context.Context
 	Usernamme string

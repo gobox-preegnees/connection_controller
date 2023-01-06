@@ -2,61 +2,83 @@ package usecase
 
 import (
 	"context"
-	"errors"
 
 	http "github.com/gobox-preegnees/connection_controller/internal/controller/http"
 	entity "github.com/gobox-preegnees/connection_controller/internal/domain/entity"
+	errors "github.com/gobox-preegnees/connection_controller/internal/errors"
+
+	"github.com/sirupsen/logrus"
 )
 
-var ErrNoVisitors = errors.New("no visitors")
-
 type IOwnerService interface {
-	DeleteOwner(ctx context.Context, owner entity.Owner) (bool, error)
-	SaveOwner(ctx context.Context, owner entity.Owner) error
+	DeleteOwner(ctx context.Context, owner entity.Owner) (ownersCount int, err error)
+	SaveOwner(ctx context.Context, owner entity.Owner) (ownersCount int, err error)
 }
 
 type IConsistencyService interface {
-	GetConsistency() entity.Consistency
-	SaveConsistency(entity.Consistency) error
+	GetConsistency(ctx context.Context) (consistency entity.Consistency, err error)
+	SaveConsistency(ctx context.Context, consistency entity.Consistency) (err error)
 }
 
 type ISnapshotService interface {
-	SaveSnapshot(ctx context.Context, snapshot entity.Snapshot) error
+	SaveSnapshot(ctx context.Context, snapshot entity.Snapshot) (err error)
 }
 
 type usecase struct {
+	log                *logrus.Logger
 	ownerService       IOwnerService
 	snapshotService    ISnapshotService
 	consistencyService IConsistencyService
 }
 
-func (u usecase) DeleteOwner(ctx context.Context, owner entity.Owner) error {
-
-	isNoVisitors, err := u.ownerService.DeleteOwner(ctx, owner)
-	if isNoVisitors {
-		return ErrNoVisitors
-	}
-	return err
+type CnfUsecase struct {
+	Log                *logrus.Logger
+	OwnerService       IOwnerService
+	SnapshotService    ISnapshotService
+	ConsistencyService IConsistencyService
 }
 
-func (u usecase) SaveOwner(ctx context.Context, owner entity.Owner) error {
-	
-	return u.ownerService.SaveOwner(ctx, owner)
+func NewUsecase(cnf CnfUsecase) *usecase {
+
+	return &usecase{
+		log:                cnf.Log,
+		ownerService:       cnf.OwnerService,
+		snapshotService:    cnf.SnapshotService,
+		consistencyService: cnf.ConsistencyService,
+	}
+}
+
+func (u usecase) GetConsistency(ctx context.Context) (entity.Consistency, error) {
+
+	return u.consistencyService.GetConsistency(ctx)
 }
 
 func (u usecase) SaveSnapshot(ctx context.Context, snapshot entity.Snapshot) error {
-	
+
 	return u.snapshotService.SaveSnapshot(ctx, snapshot)
 }
 
-func (u usecase) GetConsistency() entity.Consistency {
-	
-	return u.consistencyService.GetConsistency()
+func (u usecase) SaveOwner(ctx context.Context, owner entity.Owner) error {
+
+	ownersCount, err := u.ownerService.SaveOwner(ctx, owner)
+	if err != nil {
+		return err
+	}
+	u.log.Debugf("ownerCount:%d on save owner:%v", ownersCount, owner)
+	return nil
 }
 
-func (u usecase) SaveConsistency(consistency entity.Consistency) error {
-	
-	return u.consistencyService.SaveConsistency(consistency)
+func (u usecase) DeleteOwner(ctx context.Context, owner entity.Owner) error {
+
+	ownersCount, err := u.ownerService.DeleteOwner(ctx, owner)
+	if err != nil {
+		return err
+	}
+	u.log.Debugf("ownerCount:%d on delete owner:%v", ownersCount, owner)
+	if ownersCount == -1 {
+		return errors.ErrNoVisitors
+	}
+	return nil
 }
 
 var _ http.IUsecase = (*usecase)(nil)

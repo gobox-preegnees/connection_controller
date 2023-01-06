@@ -11,9 +11,8 @@ import (
 )
 
 type IOwnerDao interface {
-	DeleteOneOwner(daoDTO.DeleteOneOwnerReqDTO) error
-	// TODO: нужно что то возращать, чтобы было понятно создали или нет
-	CreateOneOwner(daoDTO.CreateOneOwnerReqDTO) error
+	DeleteOneOwner(req daoDTO.DeleteOneOwnerReqDTO) (countOnwers int, err error)
+	CreateOneOwner(req daoDTO.CreateOneOwnerReqDTO) (countOnwers int, err error)
 }
 
 type ownerService struct {
@@ -22,7 +21,7 @@ type ownerService struct {
 }
 
 type CnfOwnerService struct {
-	Log *logrus.Logger
+	Log      *logrus.Logger
 	OwnerDao IOwnerDao
 }
 
@@ -34,14 +33,22 @@ func NewOwnerService(cnf CnfOwnerService) *ownerService {
 	}
 }
 
-func (*ownerService) DeleteOwner(ctx context.Context, owner entity.Owner) (bool, error) {
+func (o ownerService) DeleteOwner(ctx context.Context, owner entity.Owner) (int, error) {
 
-	return false, nil
+	return o.dao.DeleteOneOwner(daoDTO.DeleteOneOwnerReqDTO{
+		Ctx:       ctx,
+		Usernamme: owner.Username,
+		Folder:    owner.Folder,
+	})
 }
 
-func (*ownerService) SaveOwner(ctx context.Context, owner entity.Owner) error {
+func (o ownerService) SaveOwner(ctx context.Context, owner entity.Owner) (int, error) {
 
-	return nil
+	return o.dao.CreateOneOwner(daoDTO.CreateOneOwnerReqDTO{
+		Ctx:       ctx,
+		Usernamme: owner.Username,
+		Folder:    owner.Folder,
+	})
 }
 
 var _ usecase.IOwnerService = (*ownerService)(nil)

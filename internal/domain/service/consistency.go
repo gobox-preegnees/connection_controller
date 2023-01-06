@@ -1,6 +1,8 @@
 package service
 
 import (
+	"context"
+
 	entity "github.com/gobox-preegnees/connection_controller/internal/domain/entity"
 	usecase "github.com/gobox-preegnees/connection_controller/internal/domain/usecase"
 
@@ -24,14 +26,13 @@ func New(cnf CnfConsistensyService) *consistensyService {
 	}
 }
 
-func (c consistensyService) GetConsistency() entity.Consistency {
+func (c consistensyService) GetConsistency(ctx context.Context) (entity.Consistency, error) {
 
-	return <-c.consistensyCh
+	return <-c.consistensyCh, nil
 }
 
-func (c consistensyService) SaveConsistency(consistency entity.Consistency) error {
+func (c consistensyService) SaveConsistency(ctx context.Context, consistency entity.Consistency) error {
 
-	// TODO: можно сделать таймаут через контекста или еще что
 	c.consistensyCh <- consistency
 	return nil
 }
