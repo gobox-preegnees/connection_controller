@@ -1,39 +1,41 @@
 version: '3.8'
+
 services:
   redis:
     image: bitnami/redis:6.2.8
     restart: always
+    container_name: redis
+
     ports:
       - 6379:6379
     command: /bin/sh -c "redis-server --requirepass password"
-    # env_file:
-    #   - redis.env
+    networks:
+      - my-network
     # volumes: 
-    #   - cache:/data
-# volumes:
-#   cache:
-#     driver: local
-  ##############################################
+    #   - ./cache:/data
+
   zookeeper:
     image: confluentinc/cp-zookeeper:7.3.0
+    restart: always
+    container_name: zookeeper
+
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
     ports:
       - 22181:2181
+    # command: echo "{put your service name here} disabled"
+    networks:
+      - my-network
     # volumes:
     #   - ./klog/zookeeper/data:/var/lib/zookeeper/data
     #   - ./klog/zookeeper/log:/var/lib/zookeeper/log
-    # command: echo "{put your service name here} disabled"
 
   kafka:
     image: confluentinc/cp-kafka:7.3.0
-    depends_on:
-      - zookeeper
-    ports:
-      - 29092:29092
-    # volumes: 
-    #   - ./klog/kafka/data:/var/lib/kafka/data
+    restart: always
+    container_name: kafka
+  
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
@@ -41,18 +43,65 @@ services:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-    # command: echo "{put your service name here} disabled"
-
-  
-  kafka-ui:
-    image: provectuslabs/kafka-ui:latest
-    depends_on:
-      - kafka
-    container_name: kafka-ui
     ports:
-      - 8080:8080
+      - 29092:29092
+    # command: echo "{put your service name here} disabled"
+    networks:
+      - my-network
+    # volumes: 
+    #   - ./klog/kafka/data:/var/lib/kafka/data
+    depends_on:
+      - zookeeper
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:f21e912a33d843b7cc781e94d7e8b2d987adf189
     restart: always
+    container_name: kafka-ui
     environment:
       - KAFKA_CLUSTERS_0_NAME=local
       - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
+    ports:
+      - 8080:8080
     # command: echo "{put your service name here} disabled"
+    networks:
+      - my-network
+    depends_on:
+      - kafka
+
+  prometheus:
+    image: prom/prometheus:v2.41.0
+    restart: always
+    container_name: prometheus
+
+    ports:
+      - 9090:9090
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    networks:
+      - my-network
+    # volumes:
+      - ./conf_promethus/:/etc/prometheus/
+    #   - ./prometheus_data:/prometheus
+
+  grafana:
+    image: grafana/grafana:9.3.2
+    restart: always
+    container_name: grafana
+
+    ports:
+      - "3000:3000"
+    # command: echo "{put your service name here} disabled"
+    # volumes:
+    #   - ./grafana-storage:/var/lib/grafana
+    #   - ./grafana.ini:/etc/grafana/grafana.ini
+    networks:
+      - my-network
+    depends_on:
+      - prometheus
+
+networks:
+  my-network:
+    driver: bridge
