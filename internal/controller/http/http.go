@@ -98,7 +98,7 @@ func (h *http1) Run() error {
 		Addr:    h.addr,
 		Handler: h.router(),
 	}
-	h.log.Info("server starting...")
+	h.log.Info("server starting on addr:", h.addr)
 
 	return h.server.ListenAndServeTLS(h.crtPath, h.keyPath)
 }
