@@ -1,0 +1,23 @@
+debug: true
+Rdis:
+  url: redis://default:password@localhost:6379/0
+kafka:
+  addrs:
+    - localhost:29092
+  producer:
+    snapshot_topic: snapshot
+    
+    # https://github.com/segmentio/kafka-go#missing-topic-creation-before-publication
+    attemps: 3
+    timeout: 10
+    sleeptime: 250
+  consumer:
+    consistency_topic: consistency
+    group_id: consistency_group_id
+    partition: 0
+http:
+  addr: localhost:9966
+  jwt_alg: HS256
+  secret: secret
+  crt_path: server.crt
+  key_path: server.key

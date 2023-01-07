@@ -7,8 +7,7 @@ type File struct {
 	ModTime  int    `json:"mod_time" validate:"required"`
 }
 
-// Snapshot. This structure must be received by the server from the client.
-// This structure is received by the server when the client has a change.
+// Snapshot. Эти данные присылаются клиентом
 type Snapshot struct {
 	// Installed on the server
 	RequestId string `json:"request_id" validate:"required"`

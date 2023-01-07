@@ -83,7 +83,7 @@ func TestCtxCancel(t *testing.T) {
 	okRecv := false
 	okSend := false
 
-	in := []string{"1", "2", "3"}
+	in := []string{"1", "2", "3", "4", "5"}
 	out := make([]string, 0, len(in)-1)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -94,6 +94,7 @@ func TestCtxCancel(t *testing.T) {
 			if err != nil {
 				if errors.Is(err, context.Canceled) {
 					okRecv = true
+					return 
 				}
 			}
 			out = append(out, val.RequestId)
@@ -101,9 +102,6 @@ func TestCtxCancel(t *testing.T) {
 	}()
 
 	for i, v := range in {
-		if i == len(in)-1 {
-			cancel()
-		}
 		if err := cService.SaveConsistency(ctx, entity.Consistency{
 			RequestId: v,
 		}); err != nil {
@@ -111,9 +109,12 @@ func TestCtxCancel(t *testing.T) {
 				okSend = true
 			}
 		}
+		if i == 1 {
+			cancel()
+		}
 	}
 
-	if okRecv != okSend && len(in) - len(out) != 1 {
+	if okRecv != okSend {
 		t.Fatal("okRecv != okSend && len(in) - len(out) != 1")
 	}
 }

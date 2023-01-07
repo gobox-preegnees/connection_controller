@@ -2,10 +2,8 @@ package http
 
 import (
 	"context"
-	// "crypto/tls"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"time"
 
@@ -15,12 +13,13 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/jwtauth/v5"
 	"github.com/go-playground/validator/v10"
+	"github.com/golang-jwt/jwt/v4"
 	"github.com/google/uuid"
 	"github.com/r3labs/sse/v2"
 	"github.com/sirupsen/logrus"
-	"github.com/golang-jwt/jwt/v4"
 )
 
+//go:generate mockgen -destination=../../mocks/controller/http/http/IUsecase/IUsecase.go -source=http.go
 type IUsecase interface {
 	SaveSnapshot(ctx context.Context, snapshot entity.Snapshot) (err error)
 	GetConsistency(ctx context.Context) (consistency entity.Consistency, err error)
@@ -28,46 +27,72 @@ type IUsecase interface {
 	DeleteStream(ctx context.Context, stream entity.Stream) (err error)
 }
 
+// http1.
 type http1 struct {
-	ctx           context.Context
-	log           *logrus.Logger
-	addr          string
-	usecase       IUsecase
-	alg           string
-	secret        string
-	server        *http.Server
-	crtPath       string
-	kayPath       string
-	cancelTimeout int
+	ctx                  context.Context
+	log                  *logrus.Logger
+	addr                 string
+	usecase              IUsecase
+	alg                  string
+	secret               string
+	server               *http.Server
+	crtPath              string
+	keyPath              string
+	cancelRequestTimeout int
+	shutdonwTimeout      int
 }
 
+// CnfhttpServer.
 type CnfhttpServer struct {
-	Ctx       context.Context
-	Log       *logrus.Logger
-	Addr      string
-	Usecase   IUsecase
-	JWTAlg    string
-	JWTSecret string
-	CrtPath   string
-	KeyPath   string
+	Ctx                  context.Context
+	Log                  *logrus.Logger
+	Addr                 string
+	Usecase              IUsecase
+	JWTAlg               string
+	JWTSecret            string
+	CrtPath              string
+	KeyPath              string
+	CancelRequestTimeout int
+	ShutdonwTimeout      int
 }
 
+// NewhttpServer.
 func NewhttpServer(cnf CnfhttpServer) *http1 {
 
-	return &http1{
-		ctx:           cnf.Ctx,
-		log:           cnf.Log,
-		addr:          cnf.Addr,
-		usecase:       cnf.Usecase,
-		alg:           cnf.JWTAlg,
-		secret:        cnf.JWTSecret,
-		crtPath:       cnf.CrtPath,
-		kayPath:       cnf.KeyPath,
-		cancelTimeout: 20,
+	htt := &http1{
+		ctx:                  cnf.Ctx,
+		log:                  cnf.Log,
+		addr:                 cnf.Addr,
+		usecase:              cnf.Usecase,
+		alg:                  cnf.JWTAlg,
+		secret:               cnf.JWTSecret,
+		crtPath:              cnf.CrtPath,
+		keyPath:              cnf.KeyPath,
+		cancelRequestTimeout: cnf.CancelRequestTimeout,
+		shutdonwTimeout:      cnf.ShutdonwTimeout,
+	}
+
+	go func() {
+		htt.stopOnDoneContext()
+	}()
+
+	return htt
+}
+
+// stopOnDoneContext.
+func (h *http1) stopOnDoneContext() {
+
+	select {
+	case <-h.ctx.Done():
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(h.shutdonwTimeout)*time.Second)
+		defer cancel()
+		h.server.Shutdown(ctx)
+		h.log.Debug("http server is stopped")
 	}
 }
 
-func (h *http1) Run() {
+// Run.
+func (h *http1) Run() error {
 
 	h.server = &http.Server{
 		Addr:    h.addr,
@@ -75,14 +100,10 @@ func (h *http1) Run() {
 	}
 	h.log.Info("server starting...")
 
-	h.log.Fatal(h.server.ListenAndServeTLS(h.crtPath, h.kayPath))
+	return h.server.ListenAndServeTLS(h.crtPath, h.keyPath)
 }
 
-func (h *http1) Shutdown() error {
-
-	return h.server.Shutdown(h.ctx)
-}
-
+// router.
 func (h http1) router() http.Handler {
 
 	r := chi.NewRouter()
@@ -110,16 +131,19 @@ func (h http1) router() http.Handler {
 		}
 	}()
 
-	r.Get("/hello", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("hello"))
-	})
-
 	r.Group(func(r chi.Router) {
 		r.Use(jwtauth.Verifier(jwtauth.New(h.alg, []byte(h.secret), nil)))
 		r.Use(jwtauth.Authenticator)
 
 		// TODO: добавить ручку для получения статистики по времени ответа
 		r.Post("/snapshot", func(w http.ResponseWriter, r *http.Request) {
+			claims := h.extractClaims(jwtauth.TokenFromHeader(r))
+			streamId := claims["stream_id"].(string)
+			if streamId == "" {
+				http.Error(w, errors.New("stream_id is nil").Error(), http.StatusBadRequest)
+				return
+			}
+			
 			snapshot := entity.Snapshot{}
 			err := json.NewDecoder(r.Body).Decode(&snapshot)
 			if err != nil {
@@ -128,7 +152,7 @@ func (h http1) router() http.Handler {
 			}
 
 			snapshot.RequestId = uuid.NewString()
-			snapshot.StreamId = fmt.Sprintf("%s_%s", snapshot.Username, snapshot.Folder)
+			snapshot.StreamId = streamId
 			snapshot.Timestamp = time.Now().UTC().Unix()
 
 			v := validator.New()
@@ -137,7 +161,7 @@ func (h http1) router() http.Handler {
 				return
 			}
 
-			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(h.cancelTimeout)*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(h.cancelRequestTimeout)*time.Second)
 			defer cancel()
 			if err := h.usecase.SaveSnapshot(ctx, snapshot); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -146,7 +170,6 @@ func (h http1) router() http.Handler {
 		})
 
 		r.Get("/event", func(w http.ResponseWriter, r *http.Request) {
-			
 			claims := h.extractClaims(jwtauth.TokenFromHeader(r))
 			streamId := claims["stream_id"].(string)
 			if streamId == "" {
@@ -154,15 +177,15 @@ func (h http1) router() http.Handler {
 				return
 			}
 
-			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(h.cancelTimeout)*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(h.cancelRequestTimeout)*time.Second)
 			defer cancel()
 			err := h.usecase.SaveStream(ctx, entity.Stream{StreamId: streamId})
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			h.log.Debugf("treamid:%s", streamId)
-			
+			h.log.Debugf("new conn to streamid:%s", streamId)
+
 			sseServer.CreateStream(streamId)
 			h.log.Debugf("Create new stream:%s, current count of streams:%s", streamId, sseServer.Streams)
 
@@ -185,8 +208,11 @@ func (h http1) router() http.Handler {
 	return r
 }
 
+// extractClaims.
 func (h http1) extractClaims(tokenStr string) jwt.MapClaims {
 
+	// Тут есть уверенность в том, что токен валидный,
+	// так как тут идет получение данных из токена. Валидация в middleware
 	token, _ := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
 		return []byte(h.secret), nil
 	})

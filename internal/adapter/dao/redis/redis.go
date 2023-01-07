@@ -2,7 +2,7 @@ package redis
 
 import (
 	"context"
-	"fmt"
+	"time"
 
 	daoDTO "github.com/gobox-preegnees/connection_controller/internal/adapter/dao"
 	service "github.com/gobox-preegnees/connection_controller/internal/domain/service"
@@ -11,15 +11,20 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// redisClient.
 type redisClient struct {
-	log    *logrus.Logger
-	client *redis.Client
+	ctx             context.Context
+	log             *logrus.Logger
+	client          *redis.Client
+	shutdonwTimeout int
 }
 
+// CnfRedisClient.
 type CnfRedisClient struct {
-	Ctx context.Context
-	Log *logrus.Logger
-	Url string
+	Ctx             context.Context
+	Log             *logrus.Logger
+	Url             string
+	ShutdownTimeout int
 }
 
 var incrBy = redis.NewScript(
@@ -59,24 +64,50 @@ var decrBy = redis.NewScript(
 	`,
 )
 
-func NewRedisClient(cnf CnfRedisClient) *redisClient {
+// NewRedisClient.
+func NewRedisClient(cnf CnfRedisClient) (*redisClient, error) {
 
 	opt, err := redis.ParseURL(cnf.Url)
 	if err != nil {
-		cnf.Log.Fatal(err)
+		return nil, err
 	}
 
 	client := redis.NewClient(opt)
 	status := client.Ping(cnf.Ctx)
 	if status.Err() != nil {
-		cnf.Log.Fatal(status.Err())
+		return nil, status.Err()
 	}
-	return &redisClient{
-		log:    cnf.Log,
-		client: client,
+
+	rCli := &redisClient{
+		ctx:             cnf.Ctx,
+		log:             cnf.Log,
+		client:          client,
+		shutdonwTimeout: cnf.ShutdownTimeout,
+	}
+
+	go func() {
+		rCli.stopOnDoneContext()
+	}()
+
+	return rCli, nil
+}
+
+// stopOnDoneContext.
+func (r *redisClient) stopOnDoneContext() {
+
+	select {
+	case <-r.ctx.Done():
+		r.client.Close()
+
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(r.shutdonwTimeout)*time.Second)
+		defer cancel()
+		r.client.Shutdown(ctx)
+		r.log.Debug("redis client is stopped")
 	}
 }
 
+// CreateOneStream. Если такого стрима (ключа) еще нет в базе, то он создастся и значение будет равно "1".
+// Если такой стрим уже есть в базе, то значение увеличится на 1.
 func (r redisClient) CreateOneStream(req daoDTO.CreateOneStreamReqDTO) (int, error) {
 
 	num, err := incrBy.Run(
@@ -91,6 +122,7 @@ func (r redisClient) CreateOneStream(req daoDTO.CreateOneStreamReqDTO) (int, err
 	return num, nil
 }
 
+// DeleteOneStream. Декреметит значение при удалении стрима, если значение становится <= 0, то в ответ содержит -1
 func (r redisClient) DeleteOneStream(req daoDTO.DeleteOneStreamReqDTO) (int, error) {
 
 	num, err := decrBy.Run(
@@ -101,7 +133,7 @@ func (r redisClient) DeleteOneStream(req daoDTO.DeleteOneStreamReqDTO) (int, err
 	if err != nil {
 		return -1, err
 	}
-	fmt.Printf("decr by stream=%s: current_connections=%d\n", req.StreamId, num)
+	r.log.Debugf("decr by stream=%s: current_connections=%d\n", req.StreamId, num)
 	if num == -1 {
 		return -1, nil
 	}

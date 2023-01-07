@@ -11,11 +11,12 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// go:generate mockgen -destination=../../mocks/kafka/consumer/state/usecase.go -package=kafka -source=consumer.go
+//go:generate mockgen -destination=../../../mocks/controller/message_broker/kafka/consumer/IUsecase/IUsecase.go -source=consumer.go
 type IUsecase interface {
 	SaveConsistency(ctx context.Context, consistency entity.Consistency) error
 }
 
+// consumer.
 type consumer struct {
 	ctx     context.Context
 	log     *logrus.Logger
@@ -23,6 +24,7 @@ type consumer struct {
 	usecase IUsecase
 }
 
+// ConsumerCnf.
 type ConsumerCnf struct {
 	Ctx       context.Context
 	Log       *logrus.Logger
@@ -33,8 +35,10 @@ type ConsumerCnf struct {
 	Usecase   IUsecase
 }
 
+// NewConsumer.
 func NewConsumer(cnf ConsumerCnf) *consumer {
 
+	// Проверка доступности
 	if conn, err := kafka.Dial("tcp", cnf.Addrs[0]); err != nil {
 		conn.Close()
 		cnf.Log.Fatal(err)
@@ -47,23 +51,37 @@ func NewConsumer(cnf ConsumerCnf) *consumer {
 		GroupID:  cnf.GroupId,
 		Topic:    cnf.Topic,
 		Logger:   cnf.Log,
-		MinBytes: 0,
 	})
 
-	return &consumer{
+	cons :=  &consumer{
 		ctx:     cnf.Ctx,
 		log:     cnf.Log,
 		reader:  reader,
 		usecase: cnf.Usecase,
 	}
+
+	go func() {
+		cons.stopOnDoneContext()
+	}()
+
+	return cons
 }
 
-func (k *consumer) Run() error {
+// stopOnDoneContext.
+func (c *consumer) stopOnDoneContext() {
 
-	defer k.reader.Close()
+	select {
+	case <-c.ctx.Done():
+		c.reader.Close()
+		c.log.Debug("kafka consumer is stopped")
+	}
+}
+
+// Run.
+func (c *consumer) Run() error {
 
 	for {
-		message, err := k.reader.FetchMessage(k.ctx)
+		message, err := c.reader.FetchMessage(c.ctx)
 		if errors.Is(err, context.Canceled) {
 			return nil
 		} else if err == io.EOF {
@@ -79,13 +97,13 @@ func (k *consumer) Run() error {
 			Timestamp: message.Time,
 			Data:      message.Value,
 		}
-		k.log.Debugf("time: %v, requestid: %v, streamid: %v, data: %v",
+		c.log.Debugf("time: %v, requestid: %v, streamid: %v, data: %v",
 			consistency.Timestamp, consistency.RequestId, consistency.StreamId, consistency.Data)
 
-		k.usecase.SaveConsistency(context.Background(), consistency)
-		k.log.Debugf("success save consistency: %v", consistency)
+		c.usecase.SaveConsistency(context.Background(), consistency)
+		c.log.Debugf("success save consistency: %v", consistency)
 
-		if err := k.reader.CommitMessages(k.ctx, message); err != nil {
+		if err := c.reader.CommitMessages(c.ctx, message); err != nil {
 			return err
 		}
 	}

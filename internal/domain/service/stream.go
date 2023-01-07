@@ -10,21 +10,25 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+//go:generate mockgen -destination=../../mocks/domain/service/stream/IStreamDao/IStreamDao.go -source=stream.go
 type IStreamDao interface {
 	DeleteOneStream(req daoDTO.DeleteOneStreamReqDTO) (numberOfUsers int, err error)
 	CreateOneStream(req daoDTO.CreateOneStreamReqDTO) (numberOfUsers int, err error)
 }
 
+// streamService.
 type streamService struct {
 	log *logrus.Logger
 	dao IStreamDao
 }
 
+// CnfStreamService.
 type CnfStreamService struct {
 	Log      *logrus.Logger
 	StreamDao IStreamDao
 }
 
+// NewStreamService.
 func NewStreamService(cnf CnfStreamService) *streamService {
 
 	return &streamService{
@@ -33,6 +37,7 @@ func NewStreamService(cnf CnfStreamService) *streamService {
 	}
 }
 
+// DeleteStream.
 func (o streamService) DeleteStream(ctx context.Context, stream entity.Stream) (int, error) {
 
 	return o.dao.DeleteOneStream(daoDTO.DeleteOneStreamReqDTO{
@@ -41,6 +46,7 @@ func (o streamService) DeleteStream(ctx context.Context, stream entity.Stream) (
 	})
 }
 
+// SaveStream.
 func (o streamService) SaveStream(ctx context.Context, stream entity.Stream) (int, error) {
 
 	return o.dao.CreateOneStream(daoDTO.CreateOneStreamReqDTO{

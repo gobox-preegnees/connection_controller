@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"os"
 
 	redisAdapter "github.com/gobox-preegnees/connection_controller/internal/adapter/dao/redis"
 	kafkaAdapter "github.com/gobox-preegnees/connection_controller/internal/adapter/message_broker/kafka"
@@ -12,30 +13,46 @@ import (
 	service "github.com/gobox-preegnees/connection_controller/internal/domain/service"
 	usecase "github.com/gobox-preegnees/connection_controller/internal/domain/usecase"
 
+	cnf "github.com/gobox-preegnees/connection_controller/internal/config"
+
 	"github.com/sirupsen/logrus"
-	// "golang.org/x/sync/errgroup"
+	"golang.org/x/sync/errgroup"
 )
 
 func main() {
 
-	const url = "redis://default:password@localhost:6379/0"
-	ctx := context.TODO()
-	logger := logrus.New()
-	logger.SetLevel(logrus.DebugLevel)
-	// logger.SetReportCaller(true)
+	path := os.Args[1]
+	if path == "" {
+		panic("path (arg 1) is empty")
+	}
 
-	streamDao := redisAdapter.NewRedisClient(redisAdapter.CnfRedisClient{
+	ctx, cancel := context.WithCancel(context.Background())
+	logger := logrus.New()
+
+	config := cnf.GetGonfig(path)
+	logger.Debugf("config: %v", config)
+
+	if config.Debug {
+		logger.SetLevel(logrus.DebugLevel)
+		logger.SetReportCaller(true)
+	}
+
+	streamDao, err := redisAdapter.NewRedisClient(redisAdapter.CnfRedisClient{
 		Ctx: ctx,
 		Log: logger,
-		Url: url,
+		Url: config.Redis.Url,
 	})
-	snapshotMessageBroker := kafkaAdapter.NewProducer(kafkaAdapter.ProducerConf{
+	if err != nil {
+		logger.Fatal(err)
+	}
+
+	snapshotMessageBroker, err := kafkaAdapter.NewProducer(kafkaAdapter.ProducerConf{
 		Log:       logger,
-		Topic:     "snapshot",
-		Addrs:     []string{"localhost:29092"},
-		Attempts:  3,
-		Timeout:   10,
-		Sleeptime: 250,
+		Topic:     config.Kafka.Producer.SnapshotTopic,
+		Addrs:     config.Kafka.Addrs,
+		Attempts:  config.Kafka.Producer.Attempts,
+		Timeout:   config.Kafka.Producer.Timeout,
+		Sleeptime: config.Kafka.Producer.Sleeptime,
 	})
 
 	streamService := service.NewStreamService(service.CnfStreamService{
@@ -60,34 +77,58 @@ func main() {
 	hController := httpController.NewhttpServer(httpController.CnfhttpServer{
 		Ctx:       ctx,
 		Log:       logger,
-		Addr:      "localhost:6060",
+		Addr:      config.Http.Addr,
 		Usecase:   uc,
-		JWTAlg:    "HS256",
-		JWTSecret: "secret",
-		CrtPath:   "server.crt",
-		KeyPath:   "server.key",
+		JWTAlg:    config.Http.JWTAlg,
+		JWTSecret: config.Http.Secret,
+		CrtPath:   config.Http.CrtPath,
+		KeyPath:   config.Http.KeyPath,
 	})
-	_ = kafkaController.NewConsumer(kafkaController.ConsumerCnf{
+	kController := kafkaController.NewConsumer(kafkaController.ConsumerCnf{
 		Ctx:       ctx,
 		Log:       logger,
-		Topic:     "consistency",
-		Addrs:     []string{"localhost:29092"},
-		GroupId:   "groupId",
-		Partition: 0,
+		Topic:     config.Kafka.Consumer.ConsistencyTopic,
+		Addrs:     config.Kafka.Addrs,
+		GroupId:   config.Kafka.Consumer.GroupId,
+		Partition: config.Kafka.Consumer.Partition,
 		Usecase:   uc,
 	})
 
-	hController.Run()
-	// g1 := new(errgroup.Group)
-	// g1.Go(func() error {
+	g := new(errgroup.Group)
+	stopCh := make(chan struct{})
 
-	// 	return nil
-	// })
-	// g1.Go(func() error {
-	// 	return kController.Run()
-	// })
+	g.Go(func() error {
+		errCh := make(chan error)
+		go func() {
+			errCh <- hController.Run()
+		}()
+		select {
+		case <-stopCh:
+			cancel()
+			return nil
+		case err := <-errCh:
+			stopCh <- struct{}{}
+			return err
+		}
+	})
 
-	// if err := g1.Wait(); err != nil {
-	// 	logger.Fatal(err)
-	// }
+	g.Go(func() error {
+		errCh := make(chan error)
+		go func() {
+			errCh <- kController.Run()
+		}()
+		select {
+		case <-stopCh:
+			cancel()
+			return nil
+		case err := <-errCh:
+			stopCh <- struct{}{}
+			return err
+		}
+	})
+
+	if err := g.Wait(); err != nil {
+		close(stopCh)
+		logger.Fatal(err)
+	}
 }

@@ -11,20 +11,24 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+//go:generate mockgen -destination=../../mocks/domain/usecase/IStreamService/IStreamService.go -source=usecase.go
 type IStreamService interface {
-	DeleteStream(ctx context.Context, stream entity.Stream) (ownersCount int, err error)
-	SaveStream(ctx context.Context, stream entity.Stream) (ownersCount int, err error)
+	DeleteStream(ctx context.Context, stream entity.Stream) (numberOfUsers int, err error)
+	SaveStream(ctx context.Context, stream entity.Stream) (numberOfUsers int, err error)
 }
 
+//go:generate mockgen -destination=../../mocks/domain/usecase/usecase/IConsistencyService/IConsistencyService.go -source=usecase.go
 type IConsistencyService interface {
 	GetConsistency(ctx context.Context) (consistency entity.Consistency, err error)
 	SaveConsistency(ctx context.Context, consistency entity.Consistency) (err error)
 }
 
+//go:generate mockgen -destination=../../mocks/domain/usecase/ISnapshotService/ISnapshotService.go -source=usecase.go
 type ISnapshotService interface {
 	SaveSnapshot(ctx context.Context, snapshot entity.Snapshot) (err error)
 }
 
+// usecase.
 type usecase struct {
 	log                *logrus.Logger
 	streamService      IStreamService
@@ -32,6 +36,7 @@ type usecase struct {
 	consistencyService IConsistencyService
 }
 
+// CnfUsecase.
 type CnfUsecase struct {
 	Log                *logrus.Logger
 	StreamService      IStreamService
@@ -39,6 +44,7 @@ type CnfUsecase struct {
 	ConsistencyService IConsistencyService
 }
 
+// NewUsecase.
 func NewUsecase(cnf CnfUsecase) *usecase {
 
 	return &usecase{
@@ -49,39 +55,44 @@ func NewUsecase(cnf CnfUsecase) *usecase {
 	}
 }
 
+// GetConsistency.
 func (u usecase) GetConsistency(ctx context.Context) (entity.Consistency, error) {
 
 	return u.consistencyService.GetConsistency(ctx)
 }
 
+// SaveConsistency.
 func (u usecase) SaveConsistency(ctx context.Context, consistency entity.Consistency) error {
 
 	return u.consistencyService.SaveConsistency(ctx, consistency)
 }
 
+// SaveSnapshot.
 func (u usecase) SaveSnapshot(ctx context.Context, snapshot entity.Snapshot) error {
 
 	return u.snapshotService.SaveSnapshot(ctx, snapshot)
 }
 
+// SaveStream.
 func (u usecase) SaveStream(ctx context.Context, stream entity.Stream) error {
 
-	ownersCount, err := u.streamService.SaveStream(ctx, stream)
+	numberOfUsers, err := u.streamService.SaveStream(ctx, stream)
 	if err != nil {
 		return err
 	}
-	u.log.Debugf("ownerCount:%d on save streamId:%v", ownersCount, stream.StreamId)
+	u.log.Debugf("numberOfUsers:%d on save streamId:%v", numberOfUsers, stream.StreamId)
 	return nil
 }
 
+// DeleteStream.
 func (u usecase) DeleteStream(ctx context.Context, stream entity.Stream) error {
 
-	ownersCount, err := u.streamService.DeleteStream(ctx, stream)
+	numberOfUsers, err := u.streamService.DeleteStream(ctx, stream)
 	if err != nil {
 		return err
 	}
-	u.log.Debugf("ownerCount:%d on delete streamId:%v", ownersCount, stream.StreamId)
-	if ownersCount == -1 {
+	u.log.Debugf("numberOfUsers:%d on delete streamId:%v", numberOfUsers, stream.StreamId)
+	if numberOfUsers == -1 {
 		return errors.ErrNoVisitors
 	}
 	return nil

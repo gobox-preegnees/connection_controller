@@ -12,20 +12,24 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+//go:generate mockgen -destination=../../mocks/domain/service/snapshot/ISnapshotMessageBroker/ISnapshotMessageBroker.go -source=snapshot.go
 type ISnapshotMessageBroker interface {
-	CreateOneSnapshot(mbDTO.PublishSnapshotReqDTO) error
+	SaveSnapshot(mbDTO.PublishSnapshotReqDTO) error
 }
 
+// snapshotService.
 type snapshotService struct {
 	log *logrus.Logger
 	mb ISnapshotMessageBroker
 }
 
+// CnfSnapshotService.
 type CnfSnapshotService struct {
 	Log *logrus.Logger
 	SnapshotMessageBroker ISnapshotMessageBroker
 }
 
+// NewShanpshotService.
 func NewShanpshotService(cnf CnfSnapshotService) *snapshotService {
 
 	return &snapshotService{
@@ -34,6 +38,7 @@ func NewShanpshotService(cnf CnfSnapshotService) *snapshotService {
 	}
 }
 
+// SaveSnapshot. 
 func (s snapshotService) SaveSnapshot(ctx context.Context, snapshot entity.Snapshot) error {
 
 	data, err := json.Marshal(snapshot)
@@ -41,7 +46,7 @@ func (s snapshotService) SaveSnapshot(ctx context.Context, snapshot entity.Snaps
         return err
     }
 	
-	return s.mb.CreateOneSnapshot(mbDTO.PublishSnapshotReqDTO{
+	return s.mb.SaveSnapshot(mbDTO.PublishSnapshotReqDTO{
 		RequestId: snapshot.RequestId,
 		StreamId: snapshot.StreamId,
 		Timestamp: time.Unix(snapshot.Timestamp, 0).UTC(),

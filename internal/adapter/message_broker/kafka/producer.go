@@ -13,7 +13,9 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// producer.
 type producer struct {
+	ctx       context.Context
 	log       *logrus.Logger
 	writer    *kafka.Writer
 	attempts  int
@@ -21,7 +23,9 @@ type producer struct {
 	sleeptime int
 }
 
+// ProducerConf.
 type ProducerConf struct {
+	Ctx       context.Context
 	Log       *logrus.Logger
 	Topic     string
 	Addrs     []string
@@ -30,11 +34,12 @@ type ProducerConf struct {
 	Sleeptime int
 }
 
-func NewProducer(cnf ProducerConf) *producer {
+// NewProducer.
+func NewProducer(cnf ProducerConf) (*producer, error) {
 
+	// Проверка доступности
 	if conn, err := kafka.Dial("tcp", cnf.Addrs[0]); err != nil {
-		conn.Close()
-		cnf.Log.Fatal(err)
+		return nil, err
 	} else {
 		conn.Close()
 	}
@@ -45,17 +50,37 @@ func NewProducer(cnf ProducerConf) *producer {
 		AllowAutoTopicCreation: true,
 		Logger:                 cnf.Log,
 	}
-	return &producer{
+
+	pr := &producer{
+		ctx:       cnf.Ctx,
 		log:       cnf.Log,
 		writer:    w,
 		attempts:  cnf.Attempts,
 		timeount:  cnf.Timeout,
 		sleeptime: cnf.Sleeptime,
 	}
+
+	go func() {
+		pr.stopOnDoneContext()
+	}()
+
+	return pr, nil
 }
 
-func (p producer) CreateOneSnapshot(req mbDTO.PublishSnapshotReqDTO) error {
+// stopOnDoneContext.
+func (p *producer) stopOnDoneContext() {
 
+	select {
+	case <-p.ctx.Done():
+		p.writer.Close()
+		p.log.Debug("kafka producer is stopped")
+	}
+}
+
+// SaveSnapshot.
+func (p producer) SaveSnapshot(req mbDTO.PublishSnapshotReqDTO) error {
+
+	// https://github.com/segmentio/kafka-go#missing-topic-creation-before-publication
 	for i := 0; i < p.attempts; i++ {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(p.timeount)*time.Second)
 		defer cancel()
@@ -81,13 +106,9 @@ func (p producer) CreateOneSnapshot(req mbDTO.PublishSnapshotReqDTO) error {
 		if err != nil {
 			return err
 		}
+		p.log.Debugf("producer sent message:%v", req)
 	}
 	return nil
-}
-
-func (p producer) Close() error {
-
-	return p.writer.Close()
 }
 
 var _ service.ISnapshotMessageBroker = (*producer)(nil)
