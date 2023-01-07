@@ -48,8 +48,7 @@ func TestCreateAndDelete(t *testing.T) {
 	clear(r)
 	defer clear(r)
 
-	username := "user1"
-	folder := "folder1"
+	streamId := "1"
 
 	data := []struct {
 		Action   bool // true = create, false = delete
@@ -57,34 +56,34 @@ func TestCreateAndDelete(t *testing.T) {
 		Err      bool
 	}{
 		{
-			Action: true,
+			Action:   true,
 			ExeptNum: 1,
-			Err: false,
+			Err:      false,
 		},
 		{
-			Action: true,
+			Action:   true,
 			ExeptNum: 2,
-			Err: false,
+			Err:      false,
 		},
 		{
-			Action: false,
+			Action:   false,
 			ExeptNum: 1,
-			Err: false,
+			Err:      false,
 		},
 		{
-			Action: false,
+			Action:   false,
 			ExeptNum: -1,
-			Err: false,
+			Err:      false,
 		},
 		{
-			Action: false,
+			Action:   false,
 			ExeptNum: -1,
-			Err: false,
+			Err:      false,
 		},
 		{
-			Action: true,
+			Action:   true,
 			ExeptNum: 1,
-			Err: false,
+			Err:      false,
 		},
 	}
 
@@ -93,23 +92,21 @@ func TestCreateAndDelete(t *testing.T) {
 			var num int
 			var err error
 			if d.Action {
-				num, err = r.CreateOneOwner(storage.CreateOneOwnerReqDTO{
-					Ctx:       ctx,
-					Usernamme: username,
-					Folder:    folder,
+				num, err = r.CreateOneStream(storage.CreateOneStreamReqDTO{
+					Ctx:      ctx,
+					StreamId: streamId,
 				})
 			} else {
-				num, err = r.DeleteOneOwner(storage.DeleteOneOwnerReqDTO{
-					Ctx:       ctx,
-					Usernamme: username,
-					Folder:    folder,
+				num, err = r.DeleteOneStream(storage.DeleteOneStreamReqDTO{
+					Ctx:      ctx,
+					StreamId: streamId,
 				})
 			}
 
 			if err != nil {
 				if !d.Err {
 					t.Errorf("expect none, got err:%v", err)
-				} 
+				}
 			}
 			if num != d.ExeptNum {
 				t.Errorf("expect %d, got %d", d.ExeptNum, num)

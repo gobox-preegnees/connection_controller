@@ -77,37 +77,35 @@ func NewRedisClient(cnf CnfRedisClient) *redisClient {
 	}
 }
 
-func (r redisClient) CreateOneOwner(req daoDTO.CreateOneOwnerReqDTO) (int, error) {
+func (r redisClient) CreateOneStream(req daoDTO.CreateOneStreamReqDTO) (int, error) {
 
-	stream := fmt.Sprintf("%s_%s", req.Usernamme, req.Folder)
 	num, err := incrBy.Run(
 		req.Ctx,
 		r.client,
-		[]string{stream},
+		[]string{req.StreamId},
 	).Int()
 	if err != nil {
 		return -1, err
 	}
-	r.log.Debugf("incr by stream=%s: current_connections=%d\n", stream, num)
+	r.log.Debugf("incr by stream=%s: current_connections=%d\n", req.StreamId, num)
 	return num, nil
 }
 
-func (r redisClient) DeleteOneOwner(req daoDTO.DeleteOneOwnerReqDTO) (int, error) {
+func (r redisClient) DeleteOneStream(req daoDTO.DeleteOneStreamReqDTO) (int, error) {
 
-	stream := fmt.Sprintf("%s_%s", req.Usernamme, req.Folder)
 	num, err := decrBy.Run(
 		req.Ctx,
 		r.client,
-		[]string{stream},
+		[]string{req.StreamId},
 	).Int()
 	if err != nil {
 		return -1, err
 	}
-	fmt.Printf("decr by stream=%s: current_connections=%d\n", stream, num)
+	fmt.Printf("decr by stream=%s: current_connections=%d\n", req.StreamId, num)
 	if num == -1 {
 		return -1, nil
 	}
 	return num, nil
 }
 
-var _ service.IOwnerDao = (*redisClient)(nil)
+var _ service.IStreamDao = (*redisClient)(nil)

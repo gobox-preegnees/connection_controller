@@ -18,13 +18,14 @@ import (
 	"github.com/google/uuid"
 	"github.com/r3labs/sse/v2"
 	"github.com/sirupsen/logrus"
+	"github.com/golang-jwt/jwt/v4"
 )
 
 type IUsecase interface {
 	SaveSnapshot(ctx context.Context, snapshot entity.Snapshot) (err error)
 	GetConsistency(ctx context.Context) (consistency entity.Consistency, err error)
-	SaveOwner(ctx context.Context, owner entity.Owner) (err error)
-	DeleteOwner(ctx context.Context, owner entity.Owner) (err error)
+	SaveStream(ctx context.Context, stream entity.Stream) (err error)
+	DeleteStream(ctx context.Context, stream entity.Stream) (err error)
 }
 
 type http1 struct {
@@ -68,17 +69,9 @@ func NewhttpServer(cnf CnfhttpServer) *http1 {
 
 func (h *http1) Run() {
 
-	// cer, err := tls.LoadX509KeyPair(h.crtPath, h.kayPath)
-	// if err != nil {
-	// 	h.log.Fatal(err)
-	// }
-
 	h.server = &http.Server{
 		Addr:    h.addr,
 		Handler: h.router(),
-		// TLSConfig: &tls.Config{
-		// 	Certificates: []tls.Certificate{cer},
-		// },
 	}
 	h.log.Info("server starting...")
 
@@ -152,48 +145,52 @@ func (h http1) router() http.Handler {
 			}
 		})
 
-		r.Post("/event", func(w http.ResponseWriter, r *http.Request) {
-			owner := entity.Owner{}
-			err := json.NewDecoder(r.Body).Decode(&owner)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-
-			v := validator.New()
-			if err := v.Struct(owner); err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
+		r.Get("/event", func(w http.ResponseWriter, r *http.Request) {
+			
+			claims := h.extractClaims(jwtauth.TokenFromHeader(r))
+			streamId := claims["stream_id"].(string)
+			if streamId == "" {
+				http.Error(w, errors.New("stream_id is nil").Error(), http.StatusBadRequest)
 				return
 			}
 
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(h.cancelTimeout)*time.Second)
 			defer cancel()
-			err = h.usecase.SaveOwner(ctx, owner)
+			err := h.usecase.SaveStream(ctx, entity.Stream{StreamId: streamId})
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-
-			streamId := fmt.Sprintf("%s_%s", owner.Username, owner.Folder)
-			h.log.Debugf("owener:%v connected to sse-server, streamid:%s", owner, streamId)
-
+			h.log.Debugf("treamid:%s", streamId)
+			
+			sseServer.CreateStream(streamId)
+			h.log.Debugf("Create new stream:%s, current count of streams:%s", streamId, sseServer.Streams)
 
 			go func() {
 				<-r.Context().Done()
-				h.log.Debugf("client: %s is disconnected", owner.Client)
+				h.log.Debugf("client of streamId: %s is disconnected", streamId)
 
-				if err := h.usecase.DeleteOwner(ctx, owner); err != nil {
+				if err := h.usecase.DeleteStream(ctx, entity.Stream{StreamId: streamId}); err != nil {
 					if errors.Is(err, errs.ErrNoVisitors) {
 						sseServer.RemoveStream(streamId)
 					} else {
-						h.log.Errorf("unable delete stream:%s", streamId)
+						h.log.Errorf("unable delete stream:%s, err:%w", streamId, err)
 					}
 				}
 				return
 			}()
-			// TODO: нужно сделать создание стрима через одну ручку, а захождение на другую
 			sseServer.ServeHTTP(w, r)
 		})
 	})
 	return r
+}
+
+func (h http1) extractClaims(tokenStr string) jwt.MapClaims {
+
+	token, _ := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
+		return []byte(h.secret), nil
+	})
+
+	claims, _ := token.Claims.(jwt.MapClaims)
+	return claims
 }

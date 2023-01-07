@@ -7,11 +7,11 @@ require (
 	github.com/go-chi/jwtauth/v5 v5.1.0
 	github.com/go-playground/validator/v10 v10.11.1
 	github.com/go-redis/redis/v8 v8.11.5
+	github.com/golang-jwt/jwt/v4 v4.4.3
 	github.com/google/uuid v1.3.0
 	github.com/r3labs/sse/v2 v2.9.0
 	github.com/segmentio/kafka-go v0.4.38
 	github.com/sirupsen/logrus v1.9.0
-	golang.org/x/sync v0.1.0
 )
 
 require (

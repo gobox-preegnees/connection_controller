@@ -11,9 +11,9 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-type IOwnerService interface {
-	DeleteOwner(ctx context.Context, owner entity.Owner) (ownersCount int, err error)
-	SaveOwner(ctx context.Context, owner entity.Owner) (ownersCount int, err error)
+type IStreamService interface {
+	DeleteStream(ctx context.Context, stream entity.Stream) (ownersCount int, err error)
+	SaveStream(ctx context.Context, stream entity.Stream) (ownersCount int, err error)
 }
 
 type IConsistencyService interface {
@@ -27,14 +27,14 @@ type ISnapshotService interface {
 
 type usecase struct {
 	log                *logrus.Logger
-	ownerService       IOwnerService
+	streamService      IStreamService
 	snapshotService    ISnapshotService
 	consistencyService IConsistencyService
 }
 
 type CnfUsecase struct {
 	Log                *logrus.Logger
-	OwnerService       IOwnerService
+	StreamService      IStreamService
 	SnapshotService    ISnapshotService
 	ConsistencyService IConsistencyService
 }
@@ -43,7 +43,7 @@ func NewUsecase(cnf CnfUsecase) *usecase {
 
 	return &usecase{
 		log:                cnf.Log,
-		ownerService:       cnf.OwnerService,
+		streamService:      cnf.StreamService,
 		snapshotService:    cnf.SnapshotService,
 		consistencyService: cnf.ConsistencyService,
 	}
@@ -55,7 +55,7 @@ func (u usecase) GetConsistency(ctx context.Context) (entity.Consistency, error)
 }
 
 func (u usecase) SaveConsistency(ctx context.Context, consistency entity.Consistency) error {
-	
+
 	return u.consistencyService.SaveConsistency(ctx, consistency)
 }
 
@@ -64,23 +64,23 @@ func (u usecase) SaveSnapshot(ctx context.Context, snapshot entity.Snapshot) err
 	return u.snapshotService.SaveSnapshot(ctx, snapshot)
 }
 
-func (u usecase) SaveOwner(ctx context.Context, owner entity.Owner) error {
+func (u usecase) SaveStream(ctx context.Context, stream entity.Stream) error {
 
-	ownersCount, err := u.ownerService.SaveOwner(ctx, owner)
+	ownersCount, err := u.streamService.SaveStream(ctx, stream)
 	if err != nil {
 		return err
 	}
-	u.log.Debugf("ownerCount:%d on save owner:%v", ownersCount, owner)
+	u.log.Debugf("ownerCount:%d on save streamId:%v", ownersCount, stream.StreamId)
 	return nil
 }
 
-func (u usecase) DeleteOwner(ctx context.Context, owner entity.Owner) error {
+func (u usecase) DeleteStream(ctx context.Context, stream entity.Stream) error {
 
-	ownersCount, err := u.ownerService.DeleteOwner(ctx, owner)
+	ownersCount, err := u.streamService.DeleteStream(ctx, stream)
 	if err != nil {
 		return err
 	}
-	u.log.Debugf("ownerCount:%d on delete owner:%v", ownersCount, owner)
+	u.log.Debugf("ownerCount:%d on delete streamId:%v", ownersCount, stream.StreamId)
 	if ownersCount == -1 {
 		return errors.ErrNoVisitors
 	}

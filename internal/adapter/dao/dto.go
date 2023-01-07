@@ -2,14 +2,12 @@ package storage
 
 import "context"
 
-type DeleteOneOwnerReqDTO struct {
+type DeleteOneStreamReqDTO struct {
 	Ctx       context.Context
-	Usernamme string
-	Folder    string
+	StreamId string
 }
 
-type CreateOneOwnerReqDTO struct {
+type CreateOneStreamReqDTO struct {
 	Ctx       context.Context
-	Usernamme string
-	Folder    string
+	StreamId string
 }

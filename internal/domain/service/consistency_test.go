@@ -55,7 +55,7 @@ func TestConsistensyService(t *testing.T) {
 			<-done
 		}
 		close(cService.consistensyCh)
-		done<- struct{}{}
+		done <- struct{}{}
 	}()
 
 	for _, v := range inId {
@@ -68,5 +68,52 @@ func TestConsistensyService(t *testing.T) {
 	t.Log(adder(""))
 	if len(adder("")) != len(inId) {
 		t.Fail()
+	}
+}
+
+func TestCtxCancel(t *testing.T) {
+
+	logger := logrus.New()
+	logger.SetLevel(logrus.DebugLevel)
+	logger.SetReportCaller(true)
+	cService := NewConsistensyService(CnfConsistensyService{
+		Log: logger,
+	})
+
+	okRecv := false
+	okSend := false
+
+	in := []string{"1", "2", "3"}
+	out := make([]string, 0, len(in)-1)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		for {
+			val, err := cService.GetConsistency(ctx)
+			if err != nil {
+				if errors.Is(err, context.Canceled) {
+					okRecv = true
+				}
+			}
+			out = append(out, val.RequestId)
+		}
+	}()
+
+	for i, v := range in {
+		if i == len(in)-1 {
+			cancel()
+		}
+		if err := cService.SaveConsistency(ctx, entity.Consistency{
+			RequestId: v,
+		}); err != nil {
+			if errors.Is(err, context.Canceled) {
+				okSend = true
+			}
+		}
+	}
+
+	if okRecv != okSend && len(in) - len(out) != 1 {
+		t.Fatal("okRecv != okSend && len(in) - len(out) != 1")
 	}
 }

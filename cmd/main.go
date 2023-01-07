@@ -24,26 +24,26 @@ func main() {
 	logger.SetLevel(logrus.DebugLevel)
 	// logger.SetReportCaller(true)
 
-	ownerDao := redisAdapter.NewRedisClient(redisAdapter.CnfRedisClient{
+	streamDao := redisAdapter.NewRedisClient(redisAdapter.CnfRedisClient{
 		Ctx: ctx,
 		Log: logger,
 		Url: url,
 	})
 	snapshotMessageBroker := kafkaAdapter.NewProducer(kafkaAdapter.ProducerConf{
-		Log: logger,
-		Topic: "snapshot",
-		Addrs: []string{"localhost:29092"},
-		Attempts: 3,
-		Timeout: 10,
+		Log:       logger,
+		Topic:     "snapshot",
+		Addrs:     []string{"localhost:29092"},
+		Attempts:  3,
+		Timeout:   10,
 		Sleeptime: 250,
 	})
 
-	ownerService := service.NewOwnerService(service.CnfOwnerService{
-		Log:      logger,
-		OwnerDao: ownerDao,
+	streamService := service.NewStreamService(service.CnfStreamService{
+		Log:       logger,
+		StreamDao: streamDao,
 	})
 	snapshotService := service.NewShanpshotService(service.CnfSnapshotService{
-		Log: logger,
+		Log:                   logger,
 		SnapshotMessageBroker: snapshotMessageBroker,
 	})
 	consistencyService := service.NewConsistensyService(service.CnfConsistensyService{
@@ -51,36 +51,36 @@ func main() {
 	})
 
 	uc := usecase.NewUsecase(usecase.CnfUsecase{
-		Log: logger,
-		OwnerService: ownerService,
-		SnapshotService: snapshotService,
+		Log:                logger,
+		StreamService:      streamService,
+		SnapshotService:    snapshotService,
 		ConsistencyService: consistencyService,
 	})
 
 	hController := httpController.NewhttpServer(httpController.CnfhttpServer{
-		Ctx:  ctx,
-		Log:  logger,
-		Addr: "localhost:6060",
-		Usecase: uc,
-		JWTAlg: "sha256", // TODO: -> "HS256"
+		Ctx:       ctx,
+		Log:       logger,
+		Addr:      "localhost:6060",
+		Usecase:   uc,
+		JWTAlg:    "HS256",
 		JWTSecret: "secret",
-		CrtPath: "server.crt",
-		KeyPath: "server.key",
+		CrtPath:   "server.crt",
+		KeyPath:   "server.key",
 	})
 	_ = kafkaController.NewConsumer(kafkaController.ConsumerCnf{
-		Ctx: ctx,
-		Log: logger,
-		Topic: "consistency",
-		Addrs: []string{"localhost:29092"},
-		GroupId: "groupId",
+		Ctx:       ctx,
+		Log:       logger,
+		Topic:     "consistency",
+		Addrs:     []string{"localhost:29092"},
+		GroupId:   "groupId",
 		Partition: 0,
-		Usecase: uc,
+		Usecase:   uc,
 	})
 
 	hController.Run()
 	// g1 := new(errgroup.Group)
 	// g1.Go(func() error {
-		
+
 	// 	return nil
 	// })
 	// g1.Go(func() error {
