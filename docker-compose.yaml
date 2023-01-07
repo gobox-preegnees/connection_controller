@@ -82,7 +82,7 @@ services:
       - '--web.console.templates=/usr/share/prometheus/consoles'
     networks:
       - my-network
-    # volumes:
+    volumes:
       - ./conf_promethus/:/etc/prometheus/
     #   - ./prometheus_data:/prometheus
 
